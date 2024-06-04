@@ -142,7 +142,7 @@ public:
 	int SendTo(const void* inData, int inLen, const SocketAddress& inTo)
 	{
 		int byteSentCount = sendto(mSocket, static_cast<const char*>(inData), inLen, 0, inTo.GetAsSockAddr(), inTo.GetSize());
-
+		
 		if (byteSentCount >= 0)
 		{
 			return byteSentCount;
@@ -201,6 +201,7 @@ public:
 		{
 			return -1;
 		}
+
 		int err = bind(mSocket, inToAddress.GetAsSockAddr(), inToAddress.GetSize());
 		if (err == SOCKET_ERROR)
 		{
@@ -328,7 +329,7 @@ int Select(const vector<TCPSocketPtr>* inReadSet, vector<TCPSocketPtr>* outReadS
 void DoTCPLoop()
 {
 	TCPSocketPtr listenSocket(CreateTCPSocket(SocketAddressFamily::INET));
-	SockAddressPtr sockAddr = SocketAddressFactory::CreateIPv4FromString("59.18.216.121:8000");
+	SockAddressPtr sockAddr = SocketAddressFactory::CreateIPv4FromString("172.30.1.64:8000");
 
 	if (listenSocket->Bind((const SocketAddress&)(*sockAddr.get())) != NO_ERROR)
 		return;
@@ -336,11 +337,6 @@ void DoTCPLoop()
 	if (listenSocket->Listen())
 		return;
 	
-	//TCPSocketPtr listenSocket = CreateTCPSocket(INET);
-	//SocketAddress receiveingAddress(INADDR_ANY, 8000);
-	//if (listenSocket->Bind(receiveingAddress) != NO_ERROR)
-	//	return;
-
 	vector<TCPSocketPtr> readBlockSockets;
 	readBlockSockets.emplace_back(listenSocket);
 	vector<TCPSocketPtr> readableSockets;
@@ -352,20 +348,29 @@ void DoTCPLoop()
 
 		for (const TCPSocketPtr& socket : readableSockets)
 		{
+			//새로운 연결이 들어오면 listenSocket 과 같다?
 			if (socket == listenSocket)
 			{
 				SocketAddress newClientAddress;
 				auto newSocket = listenSocket->Accept(newClientAddress);
-				cout << "Connect New Client" << endl;
+				cout << "Connect New Client, socket id:" << newSocket->GetSocket() << endl;
 				readBlockSockets.emplace_back(newSocket);
 			}
 			else
 			{
+				//GOOD_SEGMENT_SIZE : 1000
 				char cData[1000];
 				memset(cData, NULL, sizeof(char) * 1000);
 				socket->Receive(cData, 1000);
-				cout << "Socket Msg:" << cData << endl;
+				cout << "Client Recv id:" << socket->GetSocket() << ", Msg:" << cData << endl;
 			}
+		}
+
+		//send test
+		for (const TCPSocketPtr& clients : readBlockSockets)
+		{
+			string strData = "ABCD";
+			clients->Send(strData.c_str(), strData.length());
 		}
 		Sleep(100);
 	}
@@ -374,7 +379,7 @@ void DoTCPLoop()
 void DoTCPTestCode()
 {
 	TCPSocketPtr pTCP(CreateTCPSocket(SocketAddressFamily::INET));
-	SockAddressPtr sockAddr = SocketAddressFactory::CreateIPv4FromString("59.18.216.121:8000");
+	SockAddressPtr sockAddr = SocketAddressFactory::CreateIPv4FromString("172.30.1.64:8000");
 	int error = pTCP->Connect((const SocketAddress&)(*sockAddr.get()));
 	if (error != SOCKET_ERROR)
 	{
@@ -392,24 +397,84 @@ void DoTCPTestCode()
 	}
 }
 
+#define BUFSIZE 100
 void DoUDPTestCode()
 {
-	UDPSocketPtr pUDP(CreateUDPSocket(SocketAddressFamily::INET));
-	SockAddressPtr sockAddr = SocketAddressFactory::CreateIPv4FromString("59.18.216.121:8000");
-	int error = pUDP->Bind((const SocketAddress&)(*sockAddr.get()));
+	UDPSocketPtr pUDP_send(CreateUDPSocket(SocketAddressFamily::INET));
+	SockAddressPtr sockAddr_send = SocketAddressFactory::CreateIPv4FromString("172.30.1.64:7000");
+
+	UDPSocketPtr pUDP_recv(CreateUDPSocket(SocketAddressFamily::INET));
+	SockAddressPtr sockAddr_recv = SocketAddressFactory::CreateIPv4FromString("172.30.1.64:8000");
+
+	string strData = "ABCD";
+	int sendOK = pUDP_send->SendTo(strData.c_str(), strData.length(), (const SocketAddress&)(*sockAddr_send.get()));
+	cout << "Send Msg" << endl;
+	if (sendOK == SOCKET_ERROR)
+	{
+		cout << "Send Error" << endl;
+	}
+	
+	//수신이면 바인드 한다
+	int error = pUDP_recv->Bind((const SocketAddress&)(*sockAddr_recv.get()));
 	if (error != SOCKET_ERROR)
 	{
-		string strData = "ABCD";
-		int sendOK = pUDP->SendTo(strData.c_str(), strData.length(), (const SocketAddress&)(*sockAddr.get()));
-		cout << "Send Msg" << endl;
-		if (sendOK == SOCKET_ERROR)
+		char buf[BUFSIZE + 1];
+		while (true)
 		{
-			cout << "Send Error" << endl;
+			int recvCnt = pUDP_recv->ReceiveFrom(buf, BUFSIZE, (SocketAddress&)(*sockAddr_recv.get()));
+
+			if (recvCnt > 0)
+			{
+				cout << "Recv Data:" << buf << endl;
+			}
 		}
 	}
 	else
 	{
 		cout << "Bind Error" << endl;
+	}
+}
+
+#define BUFSIZE 512
+void UDPSample()
+{
+	// socket()
+	SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sock == INVALID_SOCKET) return;
+	printf("UDP 소켓이 생성되었습니다.\n");
+
+	// 소켓 주소 구조체 초기화
+	SOCKADDR_IN serveraddr;
+	ZeroMemory(&serveraddr, sizeof(serveraddr));
+	serveraddr.sin_family = AF_INET;
+	serveraddr.sin_port = htons(7000);
+	serveraddr.sin_addr.s_addr = inet_addr("172.30.1.64");
+
+	// 데이터 통신에 사용할 변수
+	SOCKADDR_IN peeraddr;
+	int addrlen;
+	char buf[BUFSIZE + 1];
+	int len;
+	for (int i = 0; i < 5; i++) {
+
+		// 데이터 보내기
+		string strData = "ABCD";
+		int retval = sendto(sock, strData.c_str(), strData.length(), 0, (SOCKADDR*)&serveraddr, sizeof(serveraddr));
+		if (retval == SOCKET_ERROR) return;
+		printf("[클라이언트] %d바이트를 보냈습니다.\n", retval);
+
+		//// 데이터 받기
+		//addrlen = sizeof(peeraddr);
+		//retval = recvfrom(sock, buf, BUFSIZE, 0,
+		//	(SOCKADDR*)&peeraddr, &addrlen);
+		//printf("서버로 부터 데이터를 받았습니다. \n\n");
+
+		//// 송신자의 IP 주소 체크
+		//if (memcmp(&peeraddr, &serveraddr, sizeof(peeraddr)))
+		//{
+		//	printf("[오류] 잘못된 데이터 입니다!\n");
+		//	return;
+		//}
 	}
 }
 
@@ -425,8 +490,12 @@ int main(void)
 	}
 
 	//DoTCPTestCode();
-	//DoUDPTestCode();
-	DoTCPLoop();
+	
+	//DoTCPLoop();
+
+	//UDPSample();
+
+	DoUDPTestCode();
 
 	cout << "Winsock CleanUp" << endl;
 	WSACleanup();
