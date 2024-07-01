@@ -27,6 +27,8 @@ TcpIp::TcpIp()
 	cout << "Winsock StartUp" << endl;
 	WORD wsok = WSAStartup(MAKEWORD(2, 2), &wsaData);
 
+	InitializeCriticalSection(&criticalsection_);
+
 	if (wsok != 0)
 	{
 		cout << "Winsock Error" << endl;
@@ -117,6 +119,12 @@ string TcpIp::RecvWaitClient()
 			socket->Receive(cData, 1000);
 			cout << "Client Recv id:" << socket->GetSocket() << ", Msg:" << cData << endl;
 			string return_str = cData;
+
+			RecvData recv_data;
+			recv_data.socket_id_ = socket->GetSocket();
+			recv_data.recv_data = cData;
+			PushRecvCmdData(recv_data);
+
 			return return_str;
 		}
 	}
@@ -149,9 +157,29 @@ string TcpIp::RecvWaitServer()
 			socket->Receive(cData, 1000);
 			cout << "Client Recv id:" << socket->GetSocket() << ", Msg:" << cData << endl;
 			return_str = cData;
+			RecvData recv_data;
+			recv_data.socket_id_ = socket->GetSocket();
+			recv_data.recv_data = cData;
+			PushRecvCmdData(recv_data);
 			return return_str;
 		}
 	}
+}
+
+void TcpIp::PushRecvCmdData(RecvData recvData)
+{
+	EnterCriticalSection(&criticalsection_);
+
+	vec_recv_data_.emplace_back(recvData);
+
+	LeaveCriticalSection(&criticalsection_);
+
+	cout << "PushRecvCmdData : " << recvData.recv_data << endl;
+}
+
+uint32_t TcpIp::GetRecvDataCount()
+{
+	return vec_recv_data_.size();
 }
 
 void TcpIp::DoUdpLoop()

@@ -16,6 +16,7 @@ int main(void)
 	while (true)
 	{
 		tcpIp.SendDataBroad("M0\r\n");
+		cout << "RecvDataCount:" << tcpIp.GetRecvDataCount() << endl;
 		Sleep(1000);
 	}
 

@@ -23,6 +23,25 @@ enum SocketType
 	Client,
 };
 
+static const uint32_t MAX_RECV_BUFFER = 1000;
+
+struct RecvData
+{
+	uint8_t socket_id_;
+	string recv_data;
+
+	RecvData()
+	{
+		ResetData();
+	}
+
+	void ResetData()
+	{
+		socket_id_ = 0;
+		recv_data.clear();
+	}
+};
+
 class SocketAddress
 {
 
@@ -262,7 +281,6 @@ private:
 	SOCKET mSocket;
 };
 
-
 class TcpIp
 {
 public:
@@ -272,6 +290,7 @@ public:
 	void SendDataBroad(string data);
 	string RecvWaitClient();
 	string RecvWaitServer();
+	uint32_t GetRecvDataCount();
 
 	void DoUdpLoop();
 	void DoUdpSendTest();
@@ -280,11 +299,17 @@ private:
 	TCPSocketPtr server_socket_;
 	vector<TCPSocketPtr> readBlockSockets_;
 	vector<TCPSocketPtr> readableSockets_;
+	vector<RecvData> vec_recv_data_;
+
+	CRITICAL_SECTION    criticalsection_;
 
 	std::thread* p_thread_;
 	static UINT	RecvProcessThread(LPVOID pParam);
 	bool StartRecvProcessThread();
 
+	
+
+	void PushRecvCmdData(RecvData recvData);
 	UDPSocketPtr CreateUDPSocket(SocketAddressFamily inFamily);
 	TCPSocketPtr CreateTCPSocket(SocketAddressFamily inFamily);
 	fd_set* FillSetFromVector(fd_set& outSet, const vector<TCPSocketPtr>* inSockets);
