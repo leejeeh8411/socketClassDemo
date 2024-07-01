@@ -155,7 +155,7 @@ public:
 		{
 			return -1;
 		}
-		int err = bind(mSocket, inToAddress.GetAsSockAddr(), inToAddress.GetSize());
+		int err = ::bind(mSocket, inToAddress.GetAsSockAddr(), inToAddress.GetSize());
 		if (err == SOCKET_ERROR)
 		{
 			cout << "Bind Error" << endl;
@@ -217,7 +217,7 @@ public:
 			return -1;
 		}
 
-		int err = bind(mSocket, inToAddress.GetAsSockAddr(), inToAddress.GetSize());
+		int err = ::bind(mSocket, inToAddress.GetAsSockAddr(), inToAddress.GetSize());
 		if (err == SOCKET_ERROR)
 		{
 			cout << "Bind Error" << endl;
