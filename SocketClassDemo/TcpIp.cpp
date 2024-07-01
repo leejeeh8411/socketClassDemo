@@ -1,6 +1,26 @@
 #include "TcpIp.h"
 
 
+UINT TcpIp::RecvProcessThread(LPVOID pParam)
+{
+	TcpIp* pPerent = (TcpIp*)pParam;
+	DWORD dwRet = 0;
+
+	while (true)
+	{
+		if (pPerent->socket_type_ == SocketType::Server)
+		{
+			string recvData = pPerent->RecvWaitServer();
+		}
+		else if (pPerent->socket_type_ == SocketType::Client)
+		{
+			string recvData = pPerent->RecvWaitClient();
+		}
+	}
+
+	return 0;
+}
+
 TcpIp::TcpIp()
 {
 	WSADATA wsaData;
@@ -19,6 +39,18 @@ TcpIp::~TcpIp()
 	WSACleanup();
 }
 
+bool TcpIp::StartRecvProcessThread()
+{
+	if (p_thread_ != NULL) {
+		return false;
+	}
+
+	p_thread_ = new std::thread(RecvProcessThread, this);
+	p_thread_->detach();
+
+	return true;
+}
+
 //server
 bool TcpIp::CreateTcpIp(string ip_address, SocketType socket_type)
 {
@@ -33,47 +65,17 @@ bool TcpIp::CreateTcpIp(string ip_address, SocketType socket_type)
 		if (pSocket->Listen())
 			return false;
 
+		server_socket_ = pSocket;
 		readBlockSockets_.emplace_back(pSocket);
-
-		while (true)
-		{
-			if (!Select(&readBlockSockets_, &readableSockets_, nullptr, nullptr, nullptr, nullptr))
-				continue;
-
-			for (const TCPSocketPtr& socket : readableSockets_)
-			{
-				//새로운 연결이 들어오면 listenSocket 과 같다?
-				if (socket == pSocket)
-				{
-					SocketAddress newClientAddress;
-					auto newSocket = pSocket->Accept(newClientAddress);
-					cout << "Connect New Client, socket id:" << newSocket->GetSocket() << endl;
-					readBlockSockets_.emplace_back(newSocket);
-				}
-				else
-				{
-					//GOOD_SEGMENT_SIZE : 1000
-					char cData[1000];
-					memset(cData, NULL, sizeof(char) * 1000);
-					socket->Receive(cData, 1000);
-					cout << "Client Recv id:" << socket->GetSocket() << ", Msg:" << cData << endl;
-				}
-			}
-
-			//send test
-			for (const TCPSocketPtr& clients : readBlockSockets_)
-			{
-				string strData = "ABCD";
-				clients->Send(strData.c_str(), strData.length());
-			}
-			Sleep(100);
-		}
+		socket_type_ = socket_type;
+		StartRecvProcessThread();
 	}
 	else if(socket_type == SocketType::Client)
 	{
 		int error = pSocket->Connect((const SocketAddress&)(*sockAddr.get()));
 		if (error != SOCKET_ERROR)
 		{
+			socket_type_ = socket_type;
 			readBlockSockets_.emplace_back(pSocket);
 			string strData = "ABCD";
 			int sendOK = pSocket->Send(strData.c_str(), strData.length());
@@ -82,6 +84,7 @@ bool TcpIp::CreateTcpIp(string ip_address, SocketType socket_type)
 			{
 				cout << "Send Error" << endl;
 			}
+			StartRecvProcessThread();
 		}
 		else
 		{
@@ -93,14 +96,63 @@ bool TcpIp::CreateTcpIp(string ip_address, SocketType socket_type)
 }
 
 
-void TcpIp::SendData(string data)
+void TcpIp::SendDataBroad(string data)
 {
-	for (const TCPSocketPtr& clients : readBlockSockets_)
+	for (const TCPSocketPtr& socket : readBlockSockets_)
 	{
-		clients->Send(data.c_str(), data.length());
+		socket->Send(data.c_str(), data.length());
 	}
 }
 
+string TcpIp::RecvWaitClient()
+{
+	for (const TCPSocketPtr& socket : readBlockSockets_)
+	{
+		if (!Select(&readBlockSockets_, &readableSockets_, nullptr, nullptr, nullptr, nullptr))
+			continue;
+		{
+			//GOOD_SEGMENT_SIZE : 1000
+			char cData[1000];
+			memset(cData, NULL, sizeof(char) * 1000);
+			socket->Receive(cData, 1000);
+			cout << "Client Recv id:" << socket->GetSocket() << ", Msg:" << cData << endl;
+			string return_str = cData;
+			return return_str;
+		}
+	}
+}
+
+string TcpIp::RecvWaitServer()
+{
+	if (!Select(&readBlockSockets_, &readableSockets_, nullptr, nullptr, nullptr, nullptr))
+	{
+
+	}
+
+	string return_str;
+	for (const TCPSocketPtr& socket : readableSockets_)
+	{
+		//새로운 연결이 들어오면 listenSocket 과 같다?
+		if (socket == server_socket_)
+		{
+			SocketAddress newClientAddress;
+			auto newSocket = server_socket_->Accept(newClientAddress);
+			cout << "Connect New Client, socket id:" << newSocket->GetSocket() << endl;
+			readBlockSockets_.emplace_back(newSocket);
+			return return_str;
+		}
+		else
+		{
+			//GOOD_SEGMENT_SIZE : 1000
+			char cData[1000];
+			memset(cData, NULL, sizeof(char) * 1000);
+			socket->Receive(cData, 1000);
+			cout << "Client Recv id:" << socket->GetSocket() << ", Msg:" << cData << endl;
+			return_str = cData;
+			return return_str;
+		}
+	}
+}
 
 void TcpIp::DoUdpLoop()
 {

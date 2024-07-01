@@ -11,12 +11,12 @@ using namespace std;
 int main(void)
 {
 	TcpIp tcpIp;
-	tcpIp.CreateTcpIp("172.30.1.86:8000", SocketType::Client);
+	tcpIp.CreateTcpIp("172.30.1.86:8000", SocketType::Server);
 
 	while (true)
 	{
-		tcpIp.SendData("M0\r\n");
-		Sleep(100);
+		tcpIp.SendDataBroad("M0\r\n");
+		Sleep(1000);
 	}
 
 	return 0;

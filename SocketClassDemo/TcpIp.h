@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 #include <iostream>
+#include <thread>
 
 #define BUFSIZE 100
 
@@ -268,13 +269,21 @@ public:
 	TcpIp();
 	~TcpIp();
 	bool CreateTcpIp(string ip_address, SocketType socket_type);
-	void SendData(string data);
+	void SendDataBroad(string data);
+	string RecvWaitClient();
+	string RecvWaitServer();
 
 	void DoUdpLoop();
 	void DoUdpSendTest();
 private:
+	SocketType socket_type_;
+	TCPSocketPtr server_socket_;
 	vector<TCPSocketPtr> readBlockSockets_;
 	vector<TCPSocketPtr> readableSockets_;
+
+	std::thread* p_thread_;
+	static UINT	RecvProcessThread(LPVOID pParam);
+	bool StartRecvProcessThread();
 
 	UDPSocketPtr CreateUDPSocket(SocketAddressFamily inFamily);
 	TCPSocketPtr CreateTCPSocket(SocketAddressFamily inFamily);
